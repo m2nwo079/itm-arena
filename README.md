@@ -50,5 +50,5 @@ We chose MIT for three reasons:
   course project meant to be shared, as long as the copyright notice is kept.
 - It is a permissive license, so it does not conflict with the open source
   libraries we depend on.
-
+- Streamlit (Apache-2.0), SQLAlchemy and pytest (MIT), and psycopg (LGPL-3.0). We only import these libraries and do not copy or modify their code, so our own code can stay MIT.
 Copyright (c) 2026 Lee Min Woo, Lee Suk Hyun, Yu Byeong Hwa, Shin Min Gyu
