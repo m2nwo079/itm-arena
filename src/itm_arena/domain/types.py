@@ -37,3 +37,12 @@ class ValidationError:
     # Question number from 1 to 10, or None for quiz-level errors
     position: int | None
     message: str
+
+
+
+@dataclass(frozen=True)
+class AnswerKey:
+    # Correct answer for one saved question, passed from the DB layer to grading
+    question_id: int
+    # Zero-based index of the correct choice (0 to 3)
+    answer_index: int
