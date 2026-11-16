@@ -12,6 +12,7 @@ Closes #
 
 ## AI use
 <!-- Write "None" if no AI tool was used. -->
-- Tool:
-- What it helped with:
-- What I checked:
+- AI assistance:
+- Task:
+- Human verification:
+- Decision:
