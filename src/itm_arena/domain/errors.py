@@ -25,3 +25,9 @@ class InvalidPinError(ArenaError):
 
 class HiddenQuizError(ArenaError):
     pass
+
+
+
+class InvalidSubmissionError(ArenaError):
+    # Raised when submitted answers are missing, unknown, or out of range
+    pass
