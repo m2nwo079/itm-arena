@@ -1,0 +1,5 @@
+psycopg==3.3.9
+psycopg-binary==3.3.9
+pytest==9.2.0
+SQLAlchemy==2.1.8
+streamlit==1.67.0
