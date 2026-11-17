@@ -1,0 +1,43 @@
+name: CI
+
+# CI only checks the code. Deployment is handled by Streamlit Community Cloud
+# when a pull request is merged into main, so nothing here needs secrets.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Only the latest run of a branch matters; cancel the ones it replaces
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python 3.12 is the team's version. Tests run on SQLite, so this job
+      # needs no database service and no secrets.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Show versions
+        run: |
+          python --version
+          pip show streamlit sqlalchemy psycopg pytest | grep -E "^(Name|Version)"
+
+      - name: Run tests
+        run: pytest -q
