@@ -28,6 +28,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy import TypeDecorator
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # Question and choice counts are fixed for every quiz
@@ -42,12 +43,38 @@ TITLE_MAX_LENGTH = 64
 
 
 def utcnow() -> datetime:
-    """Current time in UTC.
-
-    SQLite has no timezone-aware column type and returns naive datetimes, so
-    every stored timestamp is UTC by convention and must be read as UTC.
-    """
+    """Current time in UTC."""
     return datetime.now(timezone.utc)
+
+
+class UtcDateTime(TypeDecorator):
+    """A timestamp that is always handed back as an aware UTC datetime.
+
+    SQLite has no timezone-aware type: it stores the text of the timestamp and
+    returns a naive datetime, while PostgreSQL returns an aware one. Comparing
+    a naive value with `datetime.now(timezone.utc)` raises TypeError, so the
+    login lockout check in #5 would work on the deployed database and fail in
+    demo mode and in CI. Normalising here keeps SQLite behaving like
+    PostgreSQL, and nothing above the database layer has to know about it.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            # A naive value is taken as UTC; we never store local time
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 class Base(DeclarativeBase):
@@ -78,10 +105,10 @@ class User(Base):
     failed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Locked out until this time; NULL means not locked
     locked_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UtcDateTime(), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        UtcDateTime(), nullable=False, default=utcnow
     )
 
     quiz: Mapped["Quiz | None"] = relationship(back_populates="owner")
@@ -116,7 +143,7 @@ class Quiz(Base):
         Boolean, nullable=False, default=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        UtcDateTime(), nullable=False, default=utcnow
     )
 
     owner: Mapped["User"] = relationship(back_populates="quiz")
@@ -184,7 +211,7 @@ class Attempt(Base):
     # Number of correct answers, 0 to 10
     score: Mapped[int] = mapped_column(Integer, nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        UtcDateTime(), nullable=False, default=utcnow
     )
 
     solver: Mapped["User"] = relationship()
@@ -230,5 +257,5 @@ class Report(Base):
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), nullable=False)
     reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        UtcDateTime(), nullable=False, default=utcnow
     )

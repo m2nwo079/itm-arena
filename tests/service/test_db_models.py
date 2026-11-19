@@ -1,5 +1,7 @@
 """Schema and repository tests against an in-memory SQLite database."""
 
+from datetime import datetime, timezone
+
 import pytest
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
@@ -236,6 +238,37 @@ def test_only_visible_quizzes_are_listed(session):
     # The owner can show their own quiz again; a reported one stays hidden
     quizzes.set_hidden_by_owner(first, False)
     assert {quiz.id for quiz in quizzes.list_visible()} == {first.id}
+
+
+def test_timestamps_come_back_as_aware_utc(session):
+    user = make_user(session, "mina")
+    locked = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+    UserRepository(session).set_login_state(
+        user, failed_attempts=5, locked_until=locked
+    )
+    session.commit()
+    session.expire_all()
+
+    stored = session.get(User, user.id)
+    assert stored.locked_until == locked
+    assert stored.locked_until.tzinfo is not None
+    assert stored.created_at.tzinfo is not None
+    # The lockout check in #5 compares against an aware "now"; on a naive value
+    # this line would raise TypeError on SQLite
+    assert datetime.now(timezone.utc) > stored.created_at
+
+
+def test_a_naive_timestamp_is_read_back_as_utc(session):
+    user = make_user(session, "mina")
+    naive = datetime(2026, 11, 17, 12, 0)
+    UserRepository(session).set_login_state(
+        user, failed_attempts=1, locked_until=naive
+    )
+    session.commit()
+    session.expire_all()
+
+    stored = session.get(User, user.id)
+    assert stored.locked_until == naive.replace(tzinfo=timezone.utc)
 
 
 def test_scores_are_returned_as_nickname_and_score_pairs(session):
