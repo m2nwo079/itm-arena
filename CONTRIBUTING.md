@@ -79,10 +79,13 @@ defining your own copy. They are a contract between all of us, so if you
 need to change or extend one, say so in your pull request description and
 tag the people whose work depends on it.
 
-Two conventions inside those types are easy to get wrong:
+Three conventions are easy to get wrong:
 
 - `answer_index` and `selected_index` are zero-based (`0`–`3`).
 - `position` is one-based (`1`–`10`).
+- Every timestamp is UTC. The database layer hands back timezone-aware
+  datetimes on both SQLite and PostgreSQL, so compare them with
+  `datetime.now(timezone.utc)` and never store local time.
 
 ## Working on an issue
 
