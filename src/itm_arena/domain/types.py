@@ -46,3 +46,11 @@ class AnswerKey:
     question_id: int
     # Zero-based index of the correct choice (0 to 3)
     answer_index: int
+
+
+@dataclass(frozen=True)
+class RankedEntry:
+    # Standard competition rank: scores 10, 10, 8 get ranks 1, 1, 3
+    rank: int
+    nickname: str
+    score: int
