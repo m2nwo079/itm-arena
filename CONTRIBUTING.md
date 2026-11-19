@@ -98,7 +98,9 @@ Two conventions inside those types are easy to get wrong:
    ```
 
    Branch names are `type/issue-number-short-slug`, where `type` is one of
-   `feat`, `fix`, `docs`, `test`, `refactor`, or `chore`.
+   `feat`, `fix`, `docs`, `test`, `refactor`, or `chore`. When the work has
+   no issue — the initial repository documents, for example — drop the
+   number and use `type/short-slug`, as in `docs/readme`.
 3. Commit as you go, following
    [Conventional Commits](https://www.conventionalcommits.org/): a type, an
    optional scope, and an imperative summary.
@@ -111,8 +113,8 @@ Two conventions inside those types are easy to get wrong:
 4. Run `pytest` before you push.
 5. Open a pull request, fill in the template, and request the reviewer
    assigned to your issue. Move the card to In review.
-6. After it is merged, move the card to Done and check the deployed app if
-   your change is visible there.
+6. After it is merged, move the card to Done. Once deployment is set up in
+   #14, also check the deployed app if your change is visible there.
 
 ## Pull requests
 
@@ -123,8 +125,9 @@ Two conventions inside those types are easy to get wrong:
   and what you saw), and **AI use**.
 - Write `Closes #12` in the description only when merging the pull request
   really finishes that issue. Otherwise write `Refs #12`.
-- `main` is protected. Nothing is pushed to it directly, CI must be green,
-  and one approval is required before a squash merge.
+- `main` is protected. Nothing is pushed to it directly, and one approval is
+  required before a squash merge. Once CI is added in #8, a green run is
+  required as well, and a red one blocks the merge.
 - Resolve every review comment before merging. If you push changes after
   an approval, ask your reviewer to approve again.
 - `main` is also what gets deployed, so a merge is a release. If a merge
@@ -154,6 +157,14 @@ Two conventions inside those types are easy to get wrong:
   reports and hiding.
 - `tests/app/` — screens driven by `streamlit.testing.v1.AppTest` in demo
   mode.
+
+Three test files still sit directly in `tests/`, from before this layout:
+`test_smoke.py`, and `test_grading.py` and `test_ranking.py` once #23 and #24
+are merged. #26 and #27 already use `tests/unit/` and `tests/service/`, so the
+proposal is to move those two into `tests/unit/` in a small follow-up and
+leave `test_smoke.py` where it is. If the team would rather drop the
+subfolders altogether, say so on this pull request and this section changes
+instead.
 
 Every change in behaviour arrives with a test. When you fix a bug, add the
 test that would have caught it.
@@ -189,7 +200,8 @@ one needs a discussion first, not a workaround:
   two simultaneous requests cannot both succeed.
 - We have no migration tool. The table structure is agreed in issue #1
   and frozen once the app is in real use; later changes go in as a
-  reviewed SQL script under `db/changes/`.
+  reviewed SQL script under `db/changes/` at the repository root — next to
+  `src/` and `tests/`, not inside `src/itm_arena/db/`.
 
 ## Questions and problems
 
