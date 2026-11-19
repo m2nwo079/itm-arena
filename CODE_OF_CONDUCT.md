@@ -1,4 +1,3 @@
-
 # Contributor Covenant Code of Conduct
 
 ## Our Pledge
@@ -37,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-In this project, the community leaders are the four maintainers of ITM Arena: Lee Min Woo, Lee Suk Hyun, Yu Byeong Hwa, and Shin Min Gyu.
+In this project, the community leaders are the four maintainers listed in LICENSE: Lee Min Woo, Lee Suk Hyun, Yu Byeong Hwa, and Shin Min Gyu. Reports are handled by Lee Min Woo (@m2nwo079).
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at m2nwo079@seoultech.ac.kr. All complaints will be reviewed and investigated promptly and fairly.
 
@@ -83,7 +82,6 @@ personal information.
 - Never share your PIN or ask others for theirs.
 - Report quizzes that break these rules to the maintainer at
   m2nwo079@seoultech.ac.kr.
-  
 ## Attribution
 
 This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 2.1, available at [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1].
