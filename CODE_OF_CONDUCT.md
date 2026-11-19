@@ -82,6 +82,7 @@ personal information.
 - Never share your PIN or ask others for theirs.
 - Report quizzes that break these rules to the maintainer at
   m2nwo079@seoultech.ac.kr.
+
 ## Attribution
 
 This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 2.1, available at [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1].
