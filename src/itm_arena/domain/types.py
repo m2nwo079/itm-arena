@@ -54,3 +54,11 @@ class RankedEntry:
     rank: int
     nickname: str
     score: int
+    
+    
+@dataclass(frozen=True)
+class GradeResult:
+    # Number of correct answers (0 to 10 for a full quiz)
+    score: int
+    # question_id -> True if the submitted answer was correct
+    correct_by_question: dict[int, bool]

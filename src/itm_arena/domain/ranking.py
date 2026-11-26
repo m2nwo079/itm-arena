@@ -2,7 +2,7 @@ from itm_arena.domain.types import RankedEntry
 
 
 def rank_entries(entries: list[tuple[str, int]]) -> list[RankedEntry]:
-    # Highest score first; nickname breaks ties so the order is always the same
+     # Highest score first; ties use plain (case-sensitive) nickname order.
     ordered = sorted(entries, key=lambda entry: (-entry[1], entry[0]))
 
     ranked: list[RankedEntry] = []
