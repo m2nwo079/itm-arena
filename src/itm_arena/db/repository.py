@@ -7,11 +7,13 @@ Who may solve a quiz, when an account is locked, and when three reports hide a q
 Repositories flush but never commit, so a caller can wrap several calls in one transaction with session_scope.
 """
 
+from collections.abc import Sequence
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from itm_arena.db.models import Question, Quiz, User
-from itm_arena.domain.types import AnswerKey, QuestionView, QuizDraft
+from itm_arena.db.models import Question, Quiz, User, Attempt, AttemptAnswer
+from itm_arena.domain.types import AnswerKey, QuestionView, QuizDraft, GradeResult, SubmittedAnswer
 
 
 class UserRepository:
@@ -109,3 +111,59 @@ class QuizRepository:
             AnswerKey(question_id=question_id, answer_index=answer_index)
             for question_id, answer_index in self._session.execute(statement).all()
         ]
+
+
+class AttemptRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get_for_solver(self, quiz_id: int, solver_id: int) -> Attempt | None:
+        return self._session.scalar(
+            select(Attempt).where(
+                Attempt.quiz_id == quiz_id, Attempt.solver_id == solver_id
+            )
+        )
+
+    def has_attempted(self, quiz_id: int, solver_id: int) -> bool:
+        """A friendly check for the UI. The UNIQUE constraint is what enforces it."""
+        return self.get_for_solver(quiz_id, solver_id) is not None
+
+    def add_with_answers(
+        self,
+        *,
+        quiz_id: int,
+        solver_id: int,
+        answers: Sequence[SubmittedAnswer],
+        result: GradeResult,
+    ) -> Attempt:
+        """Save an attempt and its answers as one unit of work.
+
+        The score and the per-question flags come from grading (#4). The UNIQUE
+        constraint on (quiz_id, solver_id) is what actually stops a second
+        attempt, even if two submissions arrive at the same time.
+        """
+        attempt = Attempt(quiz_id=quiz_id, solver_id=solver_id, score=result.score)
+        self._session.add(attempt)
+        self._session.flush()
+
+        for answer in answers:
+            self._session.add(
+                AttemptAnswer(
+                    attempt_id=attempt.id,
+                    question_id=answer.question_id,
+                    selected_index=answer.selected_index,
+                    is_correct=result.correct_by_question[answer.question_id],
+                )
+            )
+        self._session.flush()
+        return attempt
+
+    def list_answers(self, attempt_id: int) -> list[AttemptAnswer]:
+        """Stored answers for the result screen (#12), in question order."""
+        statement = (
+            select(AttemptAnswer)
+            .join(Question, Question.id == AttemptAnswer.question_id)
+            .where(AttemptAnswer.attempt_id == attempt_id)
+            .order_by(Question.position)
+        )
+        return list(self._session.scalars(statement))
