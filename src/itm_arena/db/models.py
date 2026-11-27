@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, UniqueConstraint, Boolean, ForeignKey
+from sqlalchemy import CheckConstraint, DateTime, Integer, String, UniqueConstraint, Boolean, ForeignKey, Index, TypeDecorator
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NICKNAME_MAX_LENGTH = 12   # User
@@ -14,11 +14,38 @@ CHOICE_MAX_LENGTH = 50   # Question
 
 
 def utcnow() -> datetime:
+    """Current time in UTC."""
+    return datetime.now(timezone.utc)
+
+
+class UtcDateTime(TypeDecorator):
+    """A timestamp that is always handed back as an aware UTC datetime.
+
+    SQLite has no timezone-aware type: it stores the text of the timestamp and
+    returns a naive datetime, while PostgreSQL returns an aware one. Comparing
+    a naive value with `datetime.now(timezone.utc)` raises TypeError, so the
+    login lockout check in #5 would work on the deployed database and fail in
+    demo mode and in CI. Normalising here keeps SQLite behaving like
+    PostgreSQL, and nothing above the database layer has to know about it.
     """
-    Every stored timestamp is UTC by convention, so SQLite and PostgreSQL
-    both hand back values that can be compared without converting.
-    """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            # A naive value is taken as UTC; we never store local time
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 class Base(DeclarativeBase):
@@ -47,11 +74,11 @@ class User(Base):
     # how many fails occured
     failed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # if fail so many time, locked
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
     
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=utcnow
+        UtcDateTime(), nullable=False, default=utcnow
     )
 
     TITLE_MAX_LENGTH = 64
@@ -65,6 +92,8 @@ class Quiz(Base):
         CheckConstraint(
             "report_count >= 0", name="ck_quizzes_report_count_non_negative"
         ),
+        # The quiz list is newest first
+        Index("ix_quizzes_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -80,7 +109,7 @@ class Quiz(Base):
     hidden_by_reports: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=utcnow
+        UtcDateTime(), nullable=False, default=utcnow
     )
 
     @property
@@ -131,6 +160,8 @@ class Attempt(Base):
         CheckConstraint(
             f"score >= 0 AND score <= {QUESTION_COUNT}", name="ck_attempts_score_range"
         ),
+        # "Quizzes I have already solved" in the quiz list
+        Index("ix_attempts_solver_id", "solver_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -141,7 +172,7 @@ class Attempt(Base):
     score: Mapped[int] = mapped_column(Integer, nullable=False)
     
     submitted_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=utcnow
+        UtcDateTime(), nullable=False, default=utcnow
     )
 
 
@@ -184,5 +215,5 @@ class Report(Base):
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), nullable=False)
     reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=utcnow
+        UtcDateTime(), nullable=False, default=utcnow
     )

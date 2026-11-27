@@ -4,6 +4,8 @@ Every test tries to break one constraint on purpose. If a test stops raising
 IntegrityError, the constraint is missing from the table, not just unused.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
@@ -295,3 +297,32 @@ def test_selected_index_outside_zero_to_three_is_rejected(session):
     with pytest.raises(IntegrityError):
         session.flush()
     session.rollback()
+
+
+### about timestamps
+
+def test_timestamps_come_back_as_aware_utc(session):
+    user = add_user(session)
+    locked = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+    user.locked_until = locked
+    session.flush()
+    session.expire_all()
+
+    stored = session.get(User, user.id)
+    assert stored.locked_until == locked
+    assert stored.locked_until.tzinfo is not None
+    assert stored.created_at.tzinfo is not None
+    # The lockout check in #5 compares against an aware "now"; on a naive value
+    # this line would raise TypeError on SQLite
+    assert datetime.now(timezone.utc) > stored.created_at
+
+
+def test_a_naive_timestamp_is_read_back_as_utc(session):
+    user = add_user(session)
+    naive = datetime(2026, 11, 17, 12, 0)
+    user.locked_until = naive
+    session.flush()
+    session.expire_all()
+
+    stored = session.get(User, user.id)
+    assert stored.locked_until == naive.replace(tzinfo=timezone.utc)
