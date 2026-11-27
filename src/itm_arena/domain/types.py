@@ -49,6 +49,14 @@ class AnswerKey:
 
 
 @dataclass(frozen=True)
+class RankedEntry:
+    # Standard competition rank: scores 10, 10, 8 get ranks 1, 1, 3
+    rank: int
+    nickname: str
+    score: int
+    
+    
+@dataclass(frozen=True)
 class GradeResult:
     # Number of correct answers (0 to 10 for a full quiz)
     score: int
