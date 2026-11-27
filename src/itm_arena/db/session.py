@@ -23,7 +23,9 @@ def create_sqlite_engine(url: str = IN_MEMORY_URL, *, echo: bool = False) -> Eng
 
 
 def _enable_sqlite_foreign_keys(engine: Engine) -> None:
-    """Turn on foreign key checks, which SQLite leaves off by default."""
+    """Turn on foreign key checks, which SQLite leaves off by default.
+    PRAGMA = command about setting for SQLite
+    """
 
     @event.listens_for(engine, "connect")
     def _set_pragma(dbapi_connection, connection_record):

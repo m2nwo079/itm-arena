@@ -7,6 +7,10 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NICKNAME_MAX_LENGTH = 12   # User
 TITLE_MAX_LENGTH = 64   # Quiz
+QUESTION_COUNT = 10   # Question
+CHOICE_COUNT = 4   # Question
+QUESTION_TEXT_MAX_LENGTH = 100   # Question
+CHOICE_MAX_LENGTH = 50   # Question
 
 
 def utcnow() -> datetime:
@@ -83,3 +87,36 @@ class Quiz(Base):
     def is_visible(self) -> bool:
         """A quiz is visible only when neither kind of hiding applies."""
         return not self.hidden_by_owner and not self.hidden_by_reports
+
+
+class Question(Base):
+    __tablename__ = "questions"
+    __table_args__ = (
+        # Exactly one question per position, so the ten slots cannot clash
+        UniqueConstraint("quiz_id", "position", name="uq_questions_quiz_id_position"),
+        CheckConstraint(
+            f"position >= 1 AND position <= {QUESTION_COUNT}",
+            name="ck_questions_position_range",
+        ),
+        CheckConstraint(
+            f"answer_index >= 0 AND answer_index <= {CHOICE_COUNT - 1}",
+            name="ck_questions_answer_index_range",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), nullable=False)
+    # One-based position, 1 to 10
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(String(QUESTION_TEXT_MAX_LENGTH), nullable=False)
+    choice_1: Mapped[str] = mapped_column(String(CHOICE_MAX_LENGTH), nullable=False)
+    choice_2: Mapped[str] = mapped_column(String(CHOICE_MAX_LENGTH), nullable=False)
+    choice_3: Mapped[str] = mapped_column(String(CHOICE_MAX_LENGTH), nullable=False)
+    choice_4: Mapped[str] = mapped_column(String(CHOICE_MAX_LENGTH), nullable=False)
+    # Zero-based index of the correct choice, 0 to 3. Never sent to a player
+    answer_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    @property
+    def choices(self) -> list[str]:
+        """The four choices in display order."""
+        return [self.choice_1, self.choice_2, self.choice_3, self.choice_4]

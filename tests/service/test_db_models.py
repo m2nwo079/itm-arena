@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from itm_arena.db.models import Base, User, Quiz
+from itm_arena.db.models import Base, User, Quiz, Question
 from itm_arena.db.session import (
     create_session_factory,
     create_sqlite_engine,
@@ -140,3 +140,71 @@ def test_two_users_can_each_have_a_quiz(factory):
 
     with factory() as session:
         assert len(session.scalars(select(Quiz)).all()) == 2
+
+
+### about Question 
+
+def make_question(quiz_id, position, **kwargs):
+    values = dict(
+        quiz_id=quiz_id, position=position, text=f"Question {position}",
+        choice_1="a", choice_2="b", choice_3="c", choice_4="d", answer_index=0,
+    )
+    values.update(kwargs)
+    return Question(**values)
+
+
+def add_quiz(session, nickname="mina"):
+    owner = make_user(nickname, nickname)
+    session.add(owner)
+    session.flush()
+    quiz = make_quiz(owner.id)
+    session.add(quiz)
+    session.flush()
+    return quiz
+
+
+def test_questions_table_is_created(engine):
+    assert "questions" in inspect(engine).get_table_names()
+
+
+def test_one_question_per_position_in_a_quiz(session):
+    quiz = add_quiz(session)
+    session.add(make_question(quiz.id, 1))
+    session.flush()
+
+    session.add(make_question(quiz.id, 1))
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
+def test_two_quizzes_can_both_have_position_one(session):
+    first = add_quiz(session, "mina")
+    second = add_quiz(session, "jun")
+    session.add(make_question(first.id, 1))
+    session.add(make_question(second.id, 1))
+    session.flush()
+
+
+def test_position_outside_one_to_ten_is_rejected(session):
+    quiz = add_quiz(session)
+    session.add(make_question(quiz.id, 11))
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
+def test_answer_index_outside_zero_to_three_is_rejected(session):
+    quiz = add_quiz(session)
+    session.add(make_question(quiz.id, 1, answer_index=4))
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
+def test_choices_are_returned_in_display_order(session):
+    quiz = add_quiz(session)
+    question = make_question(quiz.id, 1, choice_1="w", choice_2="x", choice_3="y", choice_4="z")
+    session.add(question)
+    session.flush()
+    assert question.choices == ["w", "x", "y", "z"]
