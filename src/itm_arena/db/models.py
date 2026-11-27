@@ -169,3 +169,20 @@ class AttemptAnswer(Base):
     
     # Stored so the result screen stays correct even if grading changes later
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+
+class Report(Base):
+    __tablename__ = "reports"
+    __table_args__ = (
+        # The same person cannot report the same quiz twice
+        UniqueConstraint(
+            "quiz_id", "reporter_id", name="uq_reports_quiz_id_reporter_id"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), nullable=False)
+    reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )

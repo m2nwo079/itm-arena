@@ -9,10 +9,10 @@ Repositories flush but never commit, so a caller can wrap several calls in one t
 
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from itm_arena.db.models import Question, Quiz, User, Attempt, AttemptAnswer
+from itm_arena.db.models import Question, Quiz, User, Attempt, AttemptAnswer, Report
 from itm_arena.domain.types import AnswerKey, QuestionView, QuizDraft, GradeResult, SubmittedAnswer
 
 
@@ -167,3 +167,35 @@ class AttemptRepository:
             .order_by(Question.position)
         )
         return list(self._session.scalars(statement))
+
+
+class ReportRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def exists(self, quiz_id: int, reporter_id: int) -> bool:
+        """A friendly check for the UI. The UNIQUE constraint is what enforces it."""
+        statement = select(Report.id).where(
+            Report.quiz_id == quiz_id, Report.reporter_id == reporter_id
+        )
+        return self._session.scalar(statement) is not None
+
+    def count(self, quiz_id: int) -> int:
+        """How many different people have reported this quiz."""
+        statement = select(func.count(Report.id)).where(Report.quiz_id == quiz_id)
+        return self._session.scalar(statement) or 0
+
+    def add(self, *, quiz: Quiz, reporter_id: int) -> int:
+        """Record one report and return the quiz's new report count.
+
+        The insert goes first, so a second report from the same person is
+        rejected by the UNIQUE constraint before the counter moves. The
+        counter is then raised by the database itself, so two reports that
+        arrive together each add one. Deciding to hide the quiz is issue #15.
+        """
+        self._session.add(Report(quiz_id=quiz.id, reporter_id=reporter_id))
+        self._session.flush()
+
+        quiz.report_count = Quiz.report_count + 1
+        self._session.flush()
+        return quiz.report_count

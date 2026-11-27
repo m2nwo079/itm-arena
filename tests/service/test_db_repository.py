@@ -1,11 +1,11 @@
 """tests for repository.py in db"""
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, inspect
 from sqlalchemy.exc import IntegrityError
 
-from itm_arena.db.models import Attempt, AttemptAnswer
-from itm_arena.db.repository import AttemptRepository, QuizRepository, UserRepository
+from itm_arena.db.models import Attempt, AttemptAnswer, Quiz
+from itm_arena.db.repository import AttemptRepository, QuizRepository, UserRepository, ReportRepository
 from itm_arena.db.session import (
     create_session_factory,
     create_sqlite_engine,
@@ -37,7 +37,7 @@ def factory(engine):
 def session(factory):
     with factory() as session:
         yield session
-        
+
 
 ### Test helper
 def make_draft(answer_index: int = 0) -> QuizDraft:
@@ -244,3 +244,94 @@ def test_one_bad_answer_rolls_back_the_whole_attempt(factory):
     with factory() as session:
         assert session.scalars(select(Attempt)).all() == []
         assert session.scalars(select(AttemptAnswer)).all() == []
+
+
+### about ReportRepository
+
+def test_reports_table_is_created(engine):
+    assert "reports" in inspect(engine).get_table_names()
+
+
+def test_the_same_person_cannot_report_a_quiz_twice(session):
+    quiz = add_quiz(session, "mina")
+    reporter = add_user(session, "jun")
+    reports = ReportRepository(session)
+
+    reports.add(quiz=quiz, reporter_id=reporter.id)
+    with pytest.raises(IntegrityError):
+        reports.add(quiz=quiz, reporter_id=reporter.id)
+    session.rollback()
+
+
+def test_one_person_can_report_two_different_quizzes(session):
+    first = add_quiz(session, "mina")
+    second = add_quiz(session, "hana")
+    reporter = add_user(session, "jun")
+    reports = ReportRepository(session)
+
+    reports.add(quiz=first, reporter_id=reporter.id)
+    reports.add(quiz=second, reporter_id=reporter.id)
+    assert reports.count(first.id) == 1
+    assert reports.count(second.id) == 1
+
+
+def test_count_grows_with_each_different_reporter(session):
+    quiz = add_quiz(session, "mina")
+    reports = ReportRepository(session)
+    assert reports.count(quiz.id) == 0
+
+    for nickname in ["jun", "hana", "suk"]:
+        reporter = add_user(session, nickname)
+        reports.add(quiz=quiz, reporter_id=reporter.id)
+    assert reports.count(quiz.id) == 3
+
+
+def test_exists_flips_after_the_report_is_recorded(session):
+    quiz = add_quiz(session, "mina")
+    reporter = add_user(session, "jun")
+    reports = ReportRepository(session)
+    assert reports.exists(quiz.id, reporter.id) is False
+
+    reports.add(quiz=quiz, reporter_id=reporter.id)
+    assert reports.exists(quiz.id, reporter.id) is True
+
+
+def test_the_reporter_must_exist(session):
+    quiz = add_quiz(session, "mina")
+    with pytest.raises(IntegrityError):
+        ReportRepository(session).add(quiz=quiz, reporter_id=999)
+    session.rollback()
+
+
+def test_add_returns_the_new_count(session):
+    quiz = add_quiz(session)
+    reports = ReportRepository(session)
+    assert reports.add(quiz=quiz, reporter_id=add_user(session, "jun").id) == 1
+    assert reports.add(quiz=quiz, reporter_id=add_user(session, "hana").id) == 2
+    assert reports.add(quiz=quiz, reporter_id=add_user(session, "suk").id) == 3
+
+
+def test_report_count_matches_the_reports_table(session):
+    quiz = add_quiz(session)
+    reports = ReportRepository(session)
+    for nickname in ["jun", "hana"]:
+        reports.add(quiz=quiz, reporter_id=add_user(session, nickname).id)
+    assert quiz.report_count == reports.count(quiz.id) == 2
+
+
+def test_a_rejected_duplicate_leaves_the_counter_alone(factory):
+    with session_scope(factory) as session:
+        quiz = add_quiz(session)
+        reporter = add_user(session, "jun")
+        ReportRepository(session).add(quiz=quiz, reporter_id=reporter.id)
+    quiz_id, reporter_id = quiz.id, reporter.id
+
+    with pytest.raises(IntegrityError):
+        with session_scope(factory) as session:
+            ReportRepository(session).add(
+                quiz=session.get(Quiz, quiz_id), reporter_id=reporter_id
+            )
+
+    with factory() as session:
+        assert session.get(Quiz, quiz_id).report_count == 1
+        assert ReportRepository(session).count(quiz_id) == 1
