@@ -108,15 +108,64 @@ class Question(Base):
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), nullable=False)
     # One-based position, 1 to 10
     position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Zero-based index of the correct choice, 0 to 3. Never sent to a player answer_index.
     text: Mapped[str] = mapped_column(String(QUESTION_TEXT_MAX_LENGTH), nullable=False)
     choice_1: Mapped[str] = mapped_column(String(CHOICE_MAX_LENGTH), nullable=False)
     choice_2: Mapped[str] = mapped_column(String(CHOICE_MAX_LENGTH), nullable=False)
     choice_3: Mapped[str] = mapped_column(String(CHOICE_MAX_LENGTH), nullable=False)
     choice_4: Mapped[str] = mapped_column(String(CHOICE_MAX_LENGTH), nullable=False)
-    # Zero-based index of the correct choice, 0 to 3. Never sent to a player
     answer_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
     @property
     def choices(self) -> list[str]:
         """The four choices in display order."""
         return [self.choice_1, self.choice_2, self.choice_3, self.choice_4]
+
+
+class Attempt(Base):
+    __tablename__ = "attempts"
+    __table_args__ = (
+        # One attempt per player per quiz
+        UniqueConstraint("quiz_id", "solver_id", name="uq_attempts_quiz_id_solver_id"),
+        CheckConstraint(
+            f"score >= 0 AND score <= {QUESTION_COUNT}", name="ck_attempts_score_range"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), nullable=False)
+    solver_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    
+    # Number of correct answers, 0 to 10
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+
+
+class AttemptAnswer(Base):
+    __tablename__ = "attempt_answers"
+    __table_args__ = (
+        # One answer per question within an attempt
+        UniqueConstraint(
+            "attempt_id",
+            "question_id",
+            name="uq_attempt_answers_attempt_id_question_id",
+        ),
+        CheckConstraint(
+            f"selected_index >= 0 AND selected_index <= {CHOICE_COUNT - 1}",
+            name="ck_attempt_answers_selected_index_range",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    attempt_id: Mapped[int] = mapped_column(ForeignKey("attempts.id"), nullable=False)
+    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), nullable=False)
+    
+    # Zero-based index the player chose, 0 to 3
+    selected_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Stored so the result screen stays correct even if grading changes later
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)

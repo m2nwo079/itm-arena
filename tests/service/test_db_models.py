@@ -1,11 +1,16 @@
-"""Schema tests for the users table, against an in-memory SQLite database."""
+"""Schema tests for the database tables, against an in-memory SQLite database.
+
+Every test tries to break one constraint on purpose. If a test stops raising
+IntegrityError, the constraint is missing from the table, not just unused.
+"""
 
 import pytest
 from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from itm_arena.db.models import Base, User, Quiz, Question
+from itm_arena.db.models import Base, User, Quiz, Question, Attempt, AttemptAnswer
+from itm_arena.db.repository import UserRepository, QuizRepository
 from itm_arena.db.session import (
     create_session_factory,
     create_sqlite_engine,
@@ -40,6 +45,17 @@ def make_user(nickname: str, nickname_key: str, **overrides) -> User:
         pin_salt="salt",
         **overrides,
     )
+
+def make_quiz(owner_id, **overrides):
+    return Quiz(owner_id=owner_id, title="mina's quiz", **overrides)
+
+
+def add_user(session, nickname="mina"):
+    owner = make_user(nickname, nickname)
+    session.add(owner)
+    session.flush()
+    return owner
+
 
 ### about Users
 
@@ -83,23 +99,12 @@ def test_session_scope_rolls_back_every_row_on_failure(factory):
 
 ### about Quiz
 
-def make_quiz(owner_id, **overrides):
-    return Quiz(owner_id=owner_id, title="mina's quiz", **overrides)
-
-
-def add_owner(session, nickname="mina"):
-    owner = make_user(nickname, nickname)
-    session.add(owner)
-    session.flush()
-    return owner
-
-
 def test_quizzes_table_is_created(engine):
     assert "quizzes" in inspect(engine).get_table_names()
 
 
 def test_one_quiz_per_owner(session):
-    owner = add_owner(session)
+    owner = add_user(session)
     session.add(make_quiz(owner.id))
     session.flush()
 
@@ -117,7 +122,7 @@ def test_quiz_owner_must_exist(session):
 
 
 def test_a_quiz_is_visible_until_it_is_hidden(session):
-    owner = add_owner(session)
+    owner = add_user(session)
     quiz = make_quiz(owner.id)
     session.add(quiz)
     session.flush()
@@ -133,8 +138,8 @@ def test_a_quiz_is_visible_until_it_is_hidden(session):
 
 def test_two_users_can_each_have_a_quiz(factory):
     with session_scope(factory) as session:
-        first = add_owner(session, "mina")
-        second = add_owner(session, "jun")
+        first = add_user(session, "mina")
+        second = add_user(session, "jun")
         session.add(make_quiz(first.id))
         session.add(make_quiz(second.id))
 
@@ -208,3 +213,85 @@ def test_choices_are_returned_in_display_order(session):
     session.add(question)
     session.flush()
     assert question.choices == ["w", "x", "y", "z"]
+
+
+### about attempt and attempt_answer
+
+def test_both_attempt_tables_are_created(engine):
+    names = inspect(engine).get_table_names()
+    assert "attempts" in names
+    assert "attempt_answers" in names
+
+
+def test_one_attempt_per_solver_per_quiz(session):
+    quiz = add_quiz(session, "mina")
+    solver = add_user(session, "jun")
+    session.add(Attempt(quiz_id=quiz.id, solver_id=solver.id, score=7))
+    session.flush()
+
+    session.add(Attempt(quiz_id=quiz.id, solver_id=solver.id, score=9))
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
+def test_a_solver_can_attempt_two_different_quizzes(session):
+    first = add_quiz(session, "mina")
+    second = add_quiz(session, "hana")
+    solver = add_user(session, "jun")
+    session.add(Attempt(quiz_id=first.id, solver_id=solver.id, score=7))
+    session.add(Attempt(quiz_id=second.id, solver_id=solver.id, score=5))
+    session.flush()
+
+
+def test_score_outside_zero_to_ten_is_rejected(session):
+    quiz = add_quiz(session, "mina")
+    solver = add_user(session, "jun")
+    session.add(Attempt(quiz_id=quiz.id, solver_id=solver.id, score=11))
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
+def test_one_answer_per_question_within_an_attempt(session):
+    quiz = add_quiz(session, "mina")
+    solver = add_user(session, "jun")
+    question = make_question(quiz.id, 1)
+    session.add(question)
+    session.flush()
+    attempt = Attempt(quiz_id=quiz.id, solver_id=solver.id, score=1)
+    session.add(attempt)
+    session.flush()
+
+    session.add(AttemptAnswer(
+        attempt_id=attempt.id, question_id=question.id,
+        selected_index=0, is_correct=True,
+    ))
+    session.flush()
+
+    session.add(AttemptAnswer(
+        attempt_id=attempt.id, question_id=question.id,
+        selected_index=1, is_correct=False,
+    ))
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
+def test_selected_index_outside_zero_to_three_is_rejected(session):
+    quiz = add_quiz(session, "mina")
+    solver = add_user(session, "jun")
+    question = make_question(quiz.id, 1)
+    session.add(question)
+    session.flush()
+    attempt = Attempt(quiz_id=quiz.id, solver_id=solver.id, score=0)
+    session.add(attempt)
+    session.flush()
+
+    session.add(AttemptAnswer(
+        attempt_id=attempt.id, question_id=question.id,
+        selected_index=4, is_correct=False,
+    ))
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
